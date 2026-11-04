@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
+import type { Config } from '../config';
 
 /**
  * Calendar dates (`date`, OID 1082) are returned as 'yyyy-mm-dd' text, never as a JS Date.
@@ -87,4 +89,14 @@ export async function pgliteDb(dataDir?: string): Promise<Db> {
     close: () => pgl.close()
   });
   return wrap(pgl, false);
+}
+
+/**
+ * The database for this process, from the configuration: PostgreSQL when a URL is given (TLS settings from
+ * DATABASE_SSL / DATABASE_SSL_CA), otherwise PGlite in `pgliteDir` (undefined = in memory).
+ */
+export async function openDb(cfg: Config, opts: { url: string | undefined; max: number; statementTimeoutMs: number; pgliteDir?: string }): Promise<Db> {
+  if (!opts.url) return pgliteDb(opts.pgliteDir);
+  const sslCa = cfg.DATABASE_SSL_CA ? readFileSync(cfg.DATABASE_SSL_CA, 'utf8') : undefined;
+  return postgresDb({ connectionString: opts.url, ssl: cfg.DATABASE_SSL, sslCa, max: opts.max, statementTimeoutMs: opts.statementTimeoutMs });
 }
