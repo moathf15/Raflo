@@ -33,6 +33,7 @@ npm run create-admin -w @riflo/api -- you@company.sa    # first admin account
 NODE_ENV=production DATABASE_URL=postgres://riflo_app:…@db/riflo DATABASE_SSL_CA=ca.crt \
   JWT_SECRET=<64 random chars> CORS_ORIGINS=https://riflo.sa,https://admin.riflo.sa COOKIE_DOMAIN=.riflo.sa \
   EMAIL_PROVIDER=smtp SMTP_URL=smtps://… EMAIL_FROM="RIFLO <no-reply@riflo.sa>" REDIS_URL=rediss://… \
+  TRUST_PROXY=10.0.0.0/8 \
   npm run start -w @riflo/api
 
 # Apps (static files)
@@ -40,7 +41,8 @@ VITE_API_URL=https://api.riflo.sa npm run build -w @riflo/web     # → apps/web
 VITE_API_URL=https://api.riflo.sa npm run build -w @riflo/admin   # → apps/admin/dist
 ```
 
-- Production refuses to start with a weak or default `JWT_SECRET`, `AUTH_DEV_CODES` on, no SMTP, non-HTTPS CORS origins, no `DATABASE_URL`, or no Redis.
+- `TRUST_PROXY` lists the load balancer's addresses or CIDRs (here a private range), so the API reads the real client IP from `X-Forwarded-For` and nobody else can set it. Use `false` if nothing sits in front of the API.
+- Production refuses to start without `TRUST_PROXY`, with a weak or default `JWT_SECRET`, `AUTH_DEV_CODES` on, no SMTP, non-HTTPS CORS origins, no `DATABASE_URL`, or no Redis.
 - A production build without `VITE_API_URL` shows a configuration error instead of silently using sample data (`VITE_ALLOW_MOCK=true` is only for demos).
 - The built apps carry a Content-Security-Policy meta tag. Also send it, plus `frame-ancestors 'none'` and HSTS, as **HTTP headers** from the static host (meta tags cannot set `frame-ancestors`).
 - The API and apps should share a site (e.g. `riflo.sa`, `api.riflo.sa`) so the SameSite=Lax cookie is sent.

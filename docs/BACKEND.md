@@ -33,7 +33,7 @@ Browsers sign in with a cookie only (`riflo_session`, HttpOnly, Secure, SameSite
 | Method | Path | Who | Purpose |
 | --- | --- | --- | --- |
 | POST | `/v1/auth/request-code` | anyone | Send a code. Per email: 60 s cooldown, 5 / hour; per IP rate limit; locked emails refused |
-| POST | `/v1/auth/verify` | anyone | Code → cookie session. Each guess reserves one of 5 attempts atomically before comparing; repeated failures lock the email (15 min → 1 h → 24 h) |
+| POST | `/v1/auth/verify` | anyone | Code → cookie session. Each guess reserves one of 5 attempts atomically before comparing; repeated failures against a live code lock sign-in: 10 from one IP → 15 min for that email+IP; 20 from any IPs → 1 h; 30 → 24 h for the email |
 | POST | `/v1/auth/native/verify` | native apps (`NATIVE_CLIENTS=true`) | Code → bearer token; refused from browsers |
 | POST | `/v1/auth/logout`, `/v1/auth/logout-all` | user | End this session / every session |
 | GET | `/v1/session` | anyone | `{ user }` or `{ user: null }` for guests (used by the apps because the cookie is unreadable to scripts) |
@@ -127,7 +127,7 @@ KPI definitions (all for the selected period):
 ```bash
 npm run dev:api                        # http://localhost:8080, PGlite in memory, seeded sample content
 AUTH_DEV_CODES=true npm run dev:api    # codes returned in the response for local testing
-npm test                               # 32 planner + 90 API tests on PGlite
+npm test                               # 32 planner + 101 API tests on PGlite
 TEST_DATABASE_URL=postgres://… TEST_DATABASE_SSL_CA=ca.crt npm test -w @riflo/api   # same tests on real PostgreSQL
 DATABASE_MIGRATION_URL=postgres://riflo_owner… npm run migrate -w @riflo/api
 ```

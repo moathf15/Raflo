@@ -21,7 +21,8 @@
 | `geo.ts` | Distance and a travel-time estimate (replaceable by a routing API) |
 | `api/contract.ts` | `UserApi`, `AdminApi`, `ApiError` |
 | `api/mock.ts` | localStorage-backed implementations with simulated latency |
-| `data/sample.ts` | Madinah sample places and approximate prayer times |
+| `prayer.ts` | Prayer times per city and date (`adhan`), in the city's time zone |
+| `data/sample.ts` | Madinah sample places (approximate; never loaded in production) |
 
 ### `@riflo/ui`
 
@@ -39,7 +40,7 @@
 
 - Guests can browse, explore and build a plan. Saving a trip, logging a visit or saving a place opens the sign-in sheet; after the code is confirmed the action continues where it left off.
 - The admin is gated by `AdminGate`: only `editor` and `admin` accounts get in.
-- Tokens live in localStorage under separate keys for the app and the admin. A 401 clears the token and the app falls back to guest mode.
+- The session lives in an HttpOnly cookie set by the API; page scripts never see it. A 401 makes the app fall back to guest mode, and a cookie whose session was revoked is cleared by the API on the next request.
 
 ## What's next
 

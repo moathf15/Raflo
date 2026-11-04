@@ -1,5 +1,7 @@
 # تقرير معالجة نتائج التدقيق الأمني والمنطقي — RIFLO
 
+> **Note (Nov 2026 audit):** the lockout in 3.2 was later changed so a stranger cannot lock an owner out (finding S2). See [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
+
 **المرجع:** RIFLO_Security_Logic_Audit_AR.docx · **تاريخ المعالجة:** 3 نوفمبر 2026
 
 ## الخلاصة

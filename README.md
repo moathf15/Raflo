@@ -17,12 +17,14 @@ VITE_API_URL=http://localhost:8080 npm run dev:admin   # admin    → http://loc
 npm run dev:web
 npm run dev:admin
 
-npm test               # 32 planner + 90 API tests (PGlite; set TEST_DATABASE_URL for real PostgreSQL)
+npm test               # 32 planner + 101 API tests (PGlite; set TEST_DATABASE_URL for real PostgreSQL)
 tests/e2e/run.sh       # full-system test in a browser (needs Playwright)
 npm run typecheck
 ```
 
 With `AUTH_DEV_CODES=true` the sign-in code is shown on screen instead of being emailed. Never use it in production.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
 ## Layout
 
@@ -42,6 +44,10 @@ docs/
   REVIEW_2_FIXES.md         Second review: concurrency, bearer path, multi-day planner
   MANUAL_EDIT_FIX.md        Manual scheduling: edits validated like generated plans
   SELECTION_FIX.md          A trip's chosen places kept by the server
+  SECURITY_AUDIT.md         Security audit (Nov 2026): findings, fixes, open risks
+  CODE_QUALITY_REPORT.md    Code quality and architecture review
+  PROJECT_STRUCTURE.md      What every folder and important file is for
+  DEVELOPER_GUIDE.md        Running, navigating and extending the project
 ops/db/             Database roles, backup and restore check
 tests/
   e2e/              Full-system browser test
