@@ -30,6 +30,6 @@
     "@types/node": "20.17.6",
     "@types/nodemailer": "8.0.2",
     "@types/pg": "8.11.10",
-    "tsx": "4.19.2"
+    "tsx": "4.23.15"
   }
 }
