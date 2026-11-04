@@ -47,6 +47,23 @@ VITE_API_URL=https://api.riflo.sa npm run build -w @riflo/admin   # → apps/adm
 - The built apps carry a Content-Security-Policy meta tag. Also send it, plus `frame-ancestors 'none'` and HSTS, as **HTTP headers** from the static host (meta tags cannot set `frame-ancestors`).
 - The API and apps should share a site (e.g. `riflo.sa`, `api.riflo.sa`) so the SameSite=Lax cookie is sent.
 
+## 3b. GitHub Pages (user app only)
+
+`.github/workflows/static.yml` builds `apps/web` and publishes it to https://moathf15.github.io/Raflo/ on every push to the default branch that touches the web app or shared packages (or by hand: Actions → "Deploy web app to GitHub Pages" → Run workflow).
+
+One-time settings:
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions** (not "Deploy from a branch").
+2. **Settings → Secrets and variables → Actions → Variables:** `VITE_API_URL` = the deployed API, `https://…`, no trailing slash. Without it the site shows its "not configured" screen; it never falls back to sample data.
+3. On the API, add `https://moathf15.github.io` to `CORS_ORIGINS`.
+
+Pages hosts static files only: the API, its database and the admin app must be deployed elsewhere (§3).
+
+Limits of the `github.io` address:
+- **Sign-in will not stick.** The session cookie is `SameSite=Lax`, and `moathf15.github.io` is a different site from the API's domain, so browsers do not send the cookie on API calls. Guests can browse and plan, but saved trips and the Passport need the site and the API on the same site. Give Pages a custom domain (e.g. `riflo.sa`, with the API on `api.riflo.sa` and `COOKIE_DOMAIN=.riflo.sa`).
+- **No custom headers.** Pages cannot send `frame-ancestors` or other CSP headers; only the CSP meta tag in the build applies.
+
+The router uses `#/` URLs, so refreshing or sharing any page works without a server rewrite rule.
+
 ## 3a. Backups
 
 ```bash

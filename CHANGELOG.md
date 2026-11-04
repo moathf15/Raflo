@@ -2,6 +2,15 @@
 
 All notable changes. Earlier reviews are recorded in `docs/SECURITY_AUDIT_FIXES.md`, `docs/REVIEW_2_FIXES.md`, `docs/MANUAL_EDIT_FIX.md` and `docs/SELECTION_FIX.md`.
 
+## 2026-11-04 — GitHub Pages deployment of the user app
+
+| File | What changed | Why | Impact |
+| --- | --- | --- | --- |
+| `.github/workflows/static.yml` | Builds `@riflo/web` (`npm ci` at the root, `npm run build -w @riflo/web`) and uploads only `apps/web/dist`; `VITE_API_URL` comes from a repository variable; `pages`/`id-token` permissions only on the deploy job; runs only when the web app or shared code changes | It uploaded the whole repository without building it; with no `index.html` at the root, `/Raflo/` was a 404 | The built app is what Pages serves |
+| `apps/web/vite.config.ts` | `base` from `BASE_PATH` (default `/`) | Pages serves the site under `/Raflo/` | Local dev, previews and the single-file build unchanged |
+| `github/workflows/deploy.yml` | Removed | Outside `.github/`, so it never ran; it duplicated the Pages job and would have published the mock data | None (it never ran) |
+| `docs/LAUNCH.md` | §3b: Pages settings and limits | Deployment instructions | — |
+
 ## 2026-11-04 — Security, quality and documentation audit
 
 Details and evidence for every finding: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
