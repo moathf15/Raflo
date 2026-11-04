@@ -44,11 +44,32 @@ export function createSessions(cfg: Config, db: Db) {
     return cookie ? { token: cookie, viaCookie: true } : null;
   }
 
+  /** The origin of a Referer header, or undefined when it is missing or not a URL (audit S5: was a 500). */
+  function refererOrigin(referer: string | undefined): string | undefined {
+    if (!referer) return undefined;
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return undefined;
+    }
+  }
+
   function checkOrigin(req: FastifyRequest) {
     if (SAFE_METHODS.has(req.method)) return;
-    const origin = req.headers.origin ?? (req.headers.referer ? new URL(req.headers.referer).origin : undefined);
+    const origin = req.headers.origin ?? refererOrigin(req.headers.referer);
     if (!origin || !origins.has(origin)) throw new HttpError(403, 'csrf_origin');
   }
+
+  /**
+   * Requests that arrived with a session cookie that is no longer valid (bad signature, revoked, expired, user
+   * suspended). They are treated as guests and the app clears the cookie on the response (audit S3), so a revoked
+   * session cannot keep a browser out of guest features and sign-out can always remove it.
+   */
+  const stale = new WeakSet<FastifyRequest>();
+  const staleCookie = (req: FastifyRequest) => {
+    stale.add(req);
+    return null;
+  };
 
   return {
     newCode: () => String(randomInt(0, 1_000_000)).padStart(6, '0'),
@@ -77,10 +98,15 @@ export function createSessions(cfg: Config, db: Db) {
     revoke: (sessionId: string) => db.query('UPDATE sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL', [sessionId]),
     revokeAll: (dbx: Db, userId: string) => dbx.query('UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]),
 
-    /** The signed-in user, or null for guests. Bad, revoked or expired sessions are rejected. */
+    /**
+     * The signed-in user, or null for guests.
+     * - A cookie that is no longer valid makes the request a guest one, and the cookie is cleared (audit S3).
+     * - A bearer token that is no longer valid is a 401: native clients send it on purpose and must sign in again.
+     */
     async optional(req: FastifyRequest): Promise<SessionUser | null> {
       const found = readToken(req);
       if (!found) return null;
+      const invalid = () => (found.viaCookie ? staleCookie(req) : Promise.reject(unauthorized()));
       let sub: string | undefined;
       let sid: unknown;
       try {
@@ -88,19 +114,22 @@ export function createSessions(cfg: Config, db: Db) {
         sub = payload.sub;
         sid = payload.sid;
       } catch {
-        throw unauthorized();
+        return invalid();
       }
-      if (typeof sid !== 'string') throw unauthorized();
+      if (typeof sid !== 'string' || typeof sub !== 'string') return invalid();
+      // CSRF: a valid cookie on a write must come from an allowed origin. Checked before any session lookup.
       if (found.viaCookie) checkOrigin(req);
       const [row] = await db.query<{ role: Role; status: string; last_used_at: Date }>(
         `SELECT u.role, u.status, s.last_used_at FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL AND s.expires_at > now() AND s.transport = $3`,
         [sid, sub, found.viaCookie ? 'cookie' : 'bearer']
       );
-      if (!row || row.status !== 'active') throw unauthorized();
+      if (!row || row.status !== 'active') return invalid();
       if (Date.now() - new Date(row.last_used_at).getTime() > TOUCH_EVERY_MS) await db.query('UPDATE sessions SET last_used_at = now() WHERE id = $1', [sid]);
-      return { id: sub!, role: row.role, sessionId: sid };
+      return { id: sub, role: row.role, sessionId: sid };
     },
+    /** True when this request carried a session cookie that is no longer valid (the app then clears it). */
+    hasStaleCookie: (req: FastifyRequest) => stale.has(req),
     async required(req: FastifyRequest): Promise<SessionUser> {
       const u = await this.optional(req);
       if (!u) throw unauthorized();

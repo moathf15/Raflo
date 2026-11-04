@@ -51,10 +51,29 @@ const Env = z.object({
   /** Set to `memory` only when exactly one API instance runs. */
   RATE_LIMIT_STORE: z.enum(['redis', 'memory']).optional(),
 
+  /**
+   * Which reverse proxies may set X-Forwarded-For (security audit S1). Without this, any client could choose its
+   * own IP and bypass every per-IP rate limit. `false` (the default) = the API is reached directly; otherwise a
+   * comma-separated list of the proxies' addresses or CIDRs, e.g. `10.0.0.0/8` or `uniquelocal` (private ranges).
+   * `true` (trust anyone) and hop counts (Fastify treats them as "trust nothing") are refused.
+   */
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .refine((v) => v !== 'true', 'TRUST_PROXY=true lets any client choose its IP; list the proxy addresses or CIDRs')
+    .refine((v) => !/^\d+$/.test(v), 'hop counts are not supported; list the proxy addresses or CIDRs')
+    .optional(),
+
   PRAYER_BREAK_MINUTES: z.coerce.number().int().min(10).max(60).default(20)
 });
 
 export type Config = z.infer<typeof Env>;
+
+/** TRUST_PROXY as Fastify's `trustProxy` option: false, or the list of trusted proxy addresses/CIDRs. */
+export function trustProxySetting(raw: string | undefined): false | string[] {
+  if (raw === undefined || raw === '' || raw === 'false') return false;
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cfg = Env.parse(env);
@@ -65,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (cfg.AUTH_DEV_CODES) problems.push('AUTH_DEV_CODES must be false');
     if (cfg.EMAIL_PROVIDER !== 'smtp' || !cfg.SMTP_URL || !cfg.EMAIL_FROM) problems.push('EMAIL_PROVIDER=smtp with SMTP_URL and EMAIL_FROM is required');
     if (cfg.CORS_ORIGINS.split(',').some((o) => !o.trim().startsWith('https://'))) problems.push('CORS_ORIGINS must all be https://');
+    if (cfg.TRUST_PROXY === undefined) problems.push('TRUST_PROXY is required: the proxy addresses/CIDRs in front of the API, or false if there is none');
     if (!cfg.REDIS_URL && cfg.RATE_LIMIT_STORE !== 'memory') problems.push('set REDIS_URL, or RATE_LIMIT_STORE=memory if only one instance runs');
     if (problems.length) throw new Error('Unsafe production configuration:\n- ' + problems.join('\n- '));
     cfg.DATABASE_SSL = true;

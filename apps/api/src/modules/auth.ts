@@ -4,7 +4,8 @@ import { CODE_TTL_MINUTES, MAX_CODE_ATTEMPTS, type Role } from '../auth/session'
 import { lockKey, type Module } from '../context';
 import type { Db } from '../db/client';
 import { maskEmail } from '../lib/email';
-import { HttpError } from '../lib/http';
+import { HttpError, unauthorized } from '../lib/http';
+import { profileOf } from '../lib/users';
 
 const Email = z.string().trim().toLowerCase().email().max(200);
 
@@ -13,14 +14,34 @@ const RESEND_COOLDOWN_SECONDS = 60;
 const MAX_CODES_PER_HOUR = 5;
 
 /**
- * Progressive lockout from failures in the last 24h, across all codes for that email:
- * 10+ → 15 minutes after the last failure, 20+ → 1 hour, 30+ → 24 hours.
+ * Progressive lockout from failed guesses in the last 24h (audit S2: it must not be a free way to lock others out).
+ * - 10+ failures from this IP for this email → 15 minutes after the last one. Another IP is not blocked by them,
+ *   so a stranger cannot lock the owner out with a few requests.
+ * - 20+ failures for this email from any IP → 1 hour; 30+ → 24 hours. These caps keep the total number of guesses
+ *   on one account at about 30 a day however many IPs an attacker uses.
+ * Only guesses against a code that was actually issued count (see `verify`), so each failure costs the attacker
+ * a code request, which is itself limited and emails the owner.
  */
-async function lockedForSeconds(db: Db, email: string): Promise<number> {
-  const [f] = await db.query<{ n: number; last: Date | null }>(`SELECT count(*)::int AS n, max(created_at) AS last FROM auth_failures WHERE identifier = $1 AND created_at > now() - interval '24 hours'`, [email]);
-  if (!f.last || f.n < 10) return 0;
-  const lockMs = (f.n >= 30 ? 24 * 60 : f.n >= 20 ? 60 : 15) * 60_000;
-  return Math.max(0, Math.ceil((new Date(f.last).getTime() + lockMs - Date.now()) / 1000));
+const LOCK_TIERS = [
+  { failures: 30, minutes: 24 * 60, scope: 'email' },
+  { failures: 20, minutes: 60, scope: 'email' },
+  { failures: 10, minutes: 15, scope: 'email+ip' }
+] as const;
+
+async function lockedForSeconds(db: Db, email: string, ip: string): Promise<number> {
+  const [f] = await db.query<{ n: number; last: Date | null; n_ip: number; last_ip: Date | null }>(
+    `SELECT count(*)::int AS n, max(created_at) AS last,
+            count(*) FILTER (WHERE ip = $2)::int AS n_ip, max(created_at) FILTER (WHERE ip = $2) AS last_ip
+     FROM auth_failures WHERE identifier = $1 AND created_at > now() - interval '24 hours'`,
+    [email, ip]
+  );
+  for (const tier of LOCK_TIERS) {
+    const [n, last] = tier.scope === 'email' ? [f.n, f.last] : [f.n_ip, f.last_ip];
+    if (!last || n < tier.failures) continue;
+    const seconds = Math.ceil((new Date(last).getTime() + tier.minutes * 60_000 - Date.now()) / 1000);
+    if (seconds > 0) return seconds;
+  }
+  return 0;
 }
 
 export const authModule: Module = (app, { db, sessions, cfg, mailer }) => {
@@ -35,7 +56,7 @@ export const authModule: Module = (app, { db, sessions, cfg, mailer }) => {
   app.post('/v1/auth/request-code', perIp, async (req, reply) => {
     const { email } = z.object({ email: Email }).parse(req.body);
 
-    const lock = await lockedForSeconds(db, email);
+    const lock = await lockedForSeconds(db, email, req.ip);
     if (lock) throw tooMany('too_many_attempts', lock);
 
     const code = sessions.newCode();
@@ -69,11 +90,11 @@ export const authModule: Module = (app, { db, sessions, cfg, mailer }) => {
    * Step 2: exchange the code for a session.
    * - Each guess first reserves one attempt with a conditional UPDATE (attempts < 5), and only then compares,
    *   so parallel guesses can never get more than 5 comparisons per code (review 3).
-   * - Failures are written outside any transaction, so an error can never roll the count back (audit 3.1).
+   * - Failures against a live code are written outside any transaction, so an error can never roll the count back (audit 3.1).
    * - The successful code is consumed with a conditional UPDATE, so it works exactly once even under races.
    */
   async function verify(req: FastifyRequest, email: string, code: string, transport: 'cookie' | 'bearer') {
-    const lock = await lockedForSeconds(db, email);
+    const lock = await lockedForSeconds(db, email, req.ip);
     if (lock) throw tooMany('too_many_attempts', lock);
 
     const fail = async () => {
@@ -91,7 +112,8 @@ export const authModule: Module = (app, { db, sessions, cfg, mailer }) => {
        RETURNING id, code_hash`,
       [email, MAX_CODE_ATTEMPTS]
     );
-    if (!row) throw await fail();
+    // No live code (never requested, expired, used, or out of attempts): nothing to guess, so not counted (audit S2).
+    if (!row) throw new HttpError(400, 'code_invalid');
     if (!sessions.codeMatches(code, row.code_hash)) throw await fail();
 
     return db.tx(async (t) => {
@@ -151,15 +173,14 @@ export const authModule: Module = (app, { db, sessions, cfg, mailer }) => {
   /** Who is signed in, if anyone. 200 with user: null for guests (the cookie is HttpOnly, so the app must ask). */
   app.get('/v1/session', async (req) => {
     const u = await sessions.optional(req).catch(() => null);
-    if (!u) return { user: null };
-    const [row] = await db.query<{ id: string; email: string; display_name: string | null; role: Role }>('SELECT id, email, display_name, role FROM users WHERE id = $1', [u.id]);
-    return { user: { id: row.id, email: row.email, displayName: row.display_name, role: row.role } };
+    return { user: u ? await profileOf(db, u.id) : null };
   });
 
   app.get('/v1/me', async (req) => {
     const u = await sessions.required(req);
-    const [row] = await db.query<{ id: string; email: string; display_name: string | null; role: Role }>('SELECT id, email, display_name, role FROM users WHERE id = $1', [u.id]);
-    return { id: row.id, email: row.email, displayName: row.display_name, role: row.role };
+    const profile = await profileOf(db, u.id);
+    if (!profile) throw unauthorized();
+    return profile;
   });
 
   app.patch('/v1/me', async (req) => {

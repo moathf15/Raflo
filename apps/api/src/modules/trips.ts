@@ -1,8 +1,9 @@
-import { explainUnscheduled, findDuplicateInDay, generatePlan, prayerTimes, scheduleDay, tripDates, validateDays, type LatLng, type Trip, type TripPreferences, type UnscheduledPlace } from '@riflo/core';
+import { explainUnscheduled, findDuplicateInDay, generatePlan, prayerTimes, scheduleDay, tripDates, validateDays, type LatLng, type Place, type Trip, type TripPreferences, type UnscheduledPlace } from '@riflo/core';
 import { z } from 'zod';
 import { withQuota, QUOTAS, track, type Module } from '../context';
 import type { Db } from '../db/client';
 import { HttpError, notFound } from '../lib/http';
+import { wishListOf } from '../lib/users';
 import { toTrip, type DayRow, type StopRow, type TripRow } from '../lib/mappers';
 import { anonymousId, placeId, Preferences, sessionId, TripInput } from '../lib/schemas';
 import { publishedPlaces } from './places';
@@ -22,37 +23,71 @@ async function activeCity(db: Db, cityId: string) {
   return { ...c, prayersOn: (date: string) => prayerTimes(location, c.timezone, date) };
 }
 
-/** The trip's chosen places, in the order they were chosen (source of truth: trip_places). */
-const selectionOf = async (db: Db, tripId: string) =>
-  (await db.query<{ place_id: string }>('SELECT place_id FROM trip_places WHERE trip_id = $1 ORDER BY added_at, place_id', [tripId])).map((r) => r.place_id);
+/** Published places and prayer times of one city, loaded once per request however many trips use it. */
+interface CityData {
+  places: Map<string, Place>;
+  city: Awaited<ReturnType<typeof activeCity>> | null;
+}
+function cityLoader(db: Db) {
+  const cache = new Map<string, Promise<CityData>>();
+  return (cityId: string) => {
+    if (!cache.has(cityId))
+      cache.set(cityId, (async () => ({ places: new Map((await publishedPlaces(db, cityId)).map((p) => [p.id, p])), city: await activeCity(db, cityId).catch(() => null) }))());
+    return cache.get(cityId)!;
+  };
+}
 
 /**
  * The "could not fit" list, always computed from the saved selection and the actual days (never stored, never
  * taken from the client): chosen places not in any day, with the day they fit on or the reason they cannot;
  * chosen places that are no longer published are listed as unavailable.
  */
-async function leftOut(db: Db, prefs: TripPreferences, days: string[][], selected: string[], breakMinutes: number): Promise<UnscheduledPlace[]> {
+function leftOut({ places: byId, city }: CityData, prefs: TripPreferences, days: string[][], selected: string[], breakMinutes: number): UnscheduledPlace[] {
   const scheduled = new Set(days.flat());
   const pending = selected.filter((id) => !scheduled.has(id));
   if (!pending.length) return [];
-  const places = await publishedPlaces(db, prefs.cityId);
-  const byId = new Map(places.map((p) => [p.id, p]));
-  const city = await activeCity(db, prefs.cityId).catch(() => null);
   const explained = city
     ? new Map(explainUnscheduled(pending.filter((id) => byId.has(id)).map((id) => byId.get(id)!), days, tripDates(prefs.startDate, prefs.endDate), byId, prefs, city.prayersOn, breakMinutes).map((u) => [u.placeId, u]))
     : new Map<string, UnscheduledPlace>();
   return pending.map((id) => explained.get(id) ?? { placeId: id, reason: 'unavailable' as const });
 }
 
-async function loadTrip(db: Db, id: string, userId: string, breakMinutes: number): Promise<Trip | null> {
-  const [t] = await db.query<TripRow>('SELECT * FROM trips WHERE id = $1 AND user_id = $2', [id, userId]);
-  if (!t) return null;
-  const days = await db.query<DayRow>('SELECT day_index, date, breaks FROM trip_days WHERE trip_id = $1', [id]);
-  const stops = await db.query<StopRow>('SELECT id, day_index, position, place_id, start_minute, travel_minutes, distance_km, warning FROM trip_stops WHERE trip_id = $1', [id]);
-  const trip = toTrip(t, days, stops);
-  const selected = await selectionOf(db, id);
-  const unscheduled = await leftOut(db, trip.preferences, trip.days.map((d) => d.stops.map((s) => s.placeId)), selected, breakMinutes);
-  return { ...trip, selected, unscheduled };
+const groupBy = <T extends { trip_id: string }>(rows: T[]) => {
+  const out = new Map<string, T[]>();
+  for (const r of rows) out.set(r.trip_id, [...(out.get(r.trip_id) ?? []), r]);
+  return out;
+};
+
+/**
+ * A user's trips with their days, stops, selection and left-out list. One query per table for all trips and one
+ * load per city (audit S4: it was about six queries plus a city reload per trip).
+ */
+async function loadTrips(db: Db, userId: string, breakMinutes: number, only?: string): Promise<Trip[]> {
+  const trips = only
+    ? await db.query<TripRow>('SELECT * FROM trips WHERE id = $1 AND user_id = $2', [only, userId])
+    : await db.query<TripRow>('SELECT * FROM trips WHERE user_id = $1 ORDER BY start_date LIMIT $2', [userId, QUOTAS.tripsTotal]);
+  if (!trips.length) return [];
+  const ids = trips.map((t) => t.id);
+  const days = groupBy(await db.query<DayRow & { trip_id: string }>('SELECT trip_id, day_index, date, breaks FROM trip_days WHERE trip_id = ANY($1::uuid[])', [ids]));
+  const stops = groupBy(await db.query<StopRow & { trip_id: string }>('SELECT trip_id, id, day_index, position, place_id, start_minute, travel_minutes, distance_km, warning FROM trip_stops WHERE trip_id = ANY($1::uuid[])', [ids]));
+  const chosen = groupBy(await db.query<{ trip_id: string; place_id: string }>('SELECT trip_id, place_id FROM trip_places WHERE trip_id = ANY($1::uuid[]) ORDER BY added_at, place_id', [ids]));
+  const cityData = cityLoader(db);
+  return Promise.all(
+    trips.map(async (t) => {
+      const trip = toTrip(t, days.get(t.id) ?? [], stops.get(t.id) ?? []);
+      const selected = (chosen.get(t.id) ?? []).map((r) => r.place_id);
+      const unscheduled = leftOut(await cityData(t.city_id), trip.preferences, trip.days.map((d) => d.stops.map((s) => s.placeId)), selected, breakMinutes);
+      return { ...trip, selected, unscheduled };
+    })
+  );
+}
+
+const loadTrip = async (db: Db, id: string, userId: string, breakMinutes: number): Promise<Trip | null> => (await loadTrips(db, userId, breakMinutes, id))[0] ?? null;
+
+/** Remember a user's last preferences, minus the dates, so the next trip starts pre-filled. */
+async function rememberPreferences(db: Db, userId: string, prefs: TripPreferences) {
+  const { startDate: _s, endDate: _e, firstDayStart: _f, lastDayEnd: _l, ...remembered } = prefs;
+  await db.query(`INSERT INTO user_preferences (user_id, preferences) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET preferences = EXCLUDED.preferences, updated_at = now()`, [userId, JSON.stringify(remembered)]);
 }
 
 /** Add places to a trip's selection (no-op for places already chosen). */
@@ -105,9 +140,8 @@ export const tripsModule: Module = (app, { db, sessions, cfg }) => {
     if (!places.length) throw new HttpError(400, 'city_unavailable');
     let wishList: string[] = [];
     if (user) {
-      wishList = (await db.query<{ place_id: string }>('SELECT place_id FROM wishlist WHERE user_id = $1', [user.id])).map((r) => r.place_id);
-      const { startDate: _s, endDate: _e, firstDayStart: _f, lastDayEnd: _l, ...remembered } = prefs;
-      await db.query(`INSERT INTO user_preferences (user_id, preferences) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET preferences = EXCLUDED.preferences, updated_at = now()`, [user.id, JSON.stringify(remembered)]);
+      wishList = await wishListOf(db, user.id);
+      await rememberPreferences(db, user.id, prefs);
     }
     const plan = generatePlan({ preferences: prefs, places, wishList, prayerTimes: city.prayersOn, breakMinutes, title: body.title });
     await track(db, 'plan_ready', user?.id ?? null, { cityId: prefs.cityId, days: plan.days.length }, body.anonymousId ?? null, body.sessionId ?? null);
@@ -116,8 +150,7 @@ export const tripsModule: Module = (app, { db, sessions, cfg }) => {
 
   app.get('/v1/trips', async (req) => {
     const u = await sessions.required(req);
-    const ids = await db.query<{ id: string }>('SELECT id FROM trips WHERE user_id = $1 ORDER BY start_date LIMIT $2', [u.id, QUOTAS.tripsTotal]);
-    return Promise.all(ids.map((r) => loadTrip(db, r.id, u.id, breakMinutes)));
+    return loadTrips(db, u.id, breakMinutes);
   });
 
   app.get('/v1/trips/:id', async (req) => {
@@ -143,7 +176,7 @@ export const tripsModule: Module = (app, { db, sessions, cfg }) => {
     const published = new Set(places.map((x) => x.id));
     const scheduled = new Set(ids.flat());
     const excluded = new Set((input.excluded ?? []).filter((id) => !scheduled.has(id)));
-    const wish = new Set((await db.query<{ place_id: string }>('SELECT place_id FROM wishlist WHERE user_id = $1', [u.id])).map((r) => r.place_id));
+    const wish = new Set(await wishListOf(db, u.id));
     const keep = (id: string) => published.has(id) && !excluded.has(id);
     const fromInterests = places.filter((x) => p.interests.includes(x.category) && keep(x.id)).map((x) => x.id);
     const fromWish = [...wish].filter(keep);
@@ -165,8 +198,7 @@ export const tripsModule: Module = (app, { db, sessions, cfg }) => {
       await choose(t, row.id, manual, 'manual');
       // Saving a trip also remembers its preferences, so the next trip starts pre-filled — including
       // for a guest who planned first and signed in only to save.
-      const { startDate: _s, endDate: _e, firstDayStart: _f, lastDayEnd: _l, ...remembered } = p;
-      await t.query(`INSERT INTO user_preferences (user_id, preferences) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET preferences = EXCLUDED.preferences, updated_at = now()`, [u.id, JSON.stringify(remembered)]);
+      await rememberPreferences(t, u.id, p);
       return row.id;
     });
     await track(db, 'trip_saved', u.id, { cityId: p.cityId, tripId: id, reused: !!input.reusedFrom }, null, input.sessionId ?? null);
@@ -183,6 +215,10 @@ export const tripsModule: Module = (app, { db, sessions, cfg }) => {
     if (!own) throw notFound();
     const { days, ids } = await buildDays(db, p, input.days, breakMinutes);
     await db.tx(async (t) => {
+      // Lock the trip row first, so two saves of the same trip run one after the other instead of both
+      // deleting and re-inserting its days (audit S9: unique-key error → 500).
+      const [locked] = await t.query('SELECT 1 FROM trips WHERE id = $1 AND user_id = $2 FOR UPDATE', [id, u.id]);
+      if (!locked) throw notFound();
       const updated = await t.query(
         `UPDATE trips SET title=$3, start_date=$4, end_date=$5, travellers=$6, trip_type=$7, budget_total=$8, interests=$9, around_prayer=$10, relaxed_pace=$11,
            first_day_start=$12, last_day_end=$13, updated_at=now()

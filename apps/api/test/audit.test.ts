@@ -265,8 +265,13 @@ describe('6.3 environment parsing', () => {
     assert.throws(() => loadConfig({ AUTH_DEV_CODES: 'yes please' } as NodeJS.ProcessEnv));
   });
   it('refuses unsafe production settings', () => {
-    const prod = { NODE_ENV: 'production', DATABASE_URL: 'postgres://x', JWT_SECRET: 'p'.repeat(48), RATE_LIMIT_STORE: 'memory', EMAIL_PROVIDER: 'smtp', SMTP_URL: 'smtps://u:p@mail.example.com', EMAIL_FROM: 'RIFLO <no-reply@riflo.sa>', CORS_ORIGINS: 'https://riflo.sa' };
+    const prod = { NODE_ENV: 'production', DATABASE_URL: 'postgres://x', JWT_SECRET: 'p'.repeat(48), RATE_LIMIT_STORE: 'memory', EMAIL_PROVIDER: 'smtp', SMTP_URL: 'smtps://u:p@mail.example.com', EMAIL_FROM: 'RIFLO <no-reply@riflo.sa>', CORS_ORIGINS: 'https://riflo.sa', TRUST_PROXY: '10.0.0.0/8' };
     assert.doesNotThrow(() => loadConfig(prod as NodeJS.ProcessEnv));
+    // Security audit S1: the trusted proxies must be stated, and "trust anyone" is refused.
+    assert.doesNotThrow(() => loadConfig({ ...prod, TRUST_PROXY: 'false' } as NodeJS.ProcessEnv));
+    assert.throws(() => loadConfig({ ...prod, TRUST_PROXY: undefined } as NodeJS.ProcessEnv));
+    assert.throws(() => loadConfig({ ...prod, TRUST_PROXY: 'true' } as NodeJS.ProcessEnv));
+    assert.throws(() => loadConfig({ ...prod, TRUST_PROXY: '1' } as NodeJS.ProcessEnv));
     assert.throws(() => loadConfig({ ...prod, AUTH_DEV_CODES: 'true' } as NodeJS.ProcessEnv));
     assert.throws(() => loadConfig({ ...prod, EMAIL_PROVIDER: 'log' } as NodeJS.ProcessEnv));
     assert.throws(() => loadConfig({ ...prod, CORS_ORIGINS: 'http://localhost:5173' } as NodeJS.ProcessEnv));

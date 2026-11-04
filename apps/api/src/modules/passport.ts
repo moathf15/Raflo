@@ -4,6 +4,7 @@ import { withQuota, QUOTAS, track, type Module } from '../context';
 import { HttpError, notFound } from '../lib/http';
 import { toVisit, VISIT_COLUMNS, type VisitRow } from '../lib/mappers';
 import { ClientEvent, isoDate, placeId } from '../lib/schemas';
+import { wishListOf } from '../lib/users';
 
 /** How far back a visit may be logged. */
 const MAX_VISIT_AGE_DAYS = 365;
@@ -14,13 +15,13 @@ export const passportModule: Module = (app, { db, sessions }) => {
     const u = await sessions.required(req);
     const [user] = await db.query<{ display_name: string | null }>('SELECT display_name FROM users WHERE id = $1', [u.id]);
     const visits = await db.query<VisitRow>(`SELECT ${VISIT_COLUMNS} FROM visits WHERE user_id = $1 ORDER BY visited_on, created_at`, [u.id]);
-    const wish = await db.query<{ place_id: string }>('SELECT place_id FROM wishlist WHERE user_id = $1 ORDER BY created_at', [u.id]);
+    const wishList = await wishListOf(db, u.id);
     const [prefs] = await db.query<{ preferences: unknown }>('SELECT preferences FROM user_preferences WHERE user_id = $1', [u.id]);
     const [stats] = await db.query<{ trips: number; days: number }>(`SELECT count(*)::int AS trips, coalesce(sum(end_date - start_date + 1), 0)::int AS days FROM trips WHERE user_id = $1`, [u.id]);
     return {
       displayName: user.display_name,
       visits: visits.map(toVisit),
-      wishList: wish.map((w) => w.place_id),
+      wishList,
       lastPreferences: prefs?.preferences ?? null,
       // Distinct places and total visits are separate numbers (audit 5.6).
       stats: { trips: stats.trips, placesVisited: new Set(visits.map((v) => v.place_id)).size, visits: visits.length, travelDays: stats.days }
@@ -94,14 +95,14 @@ export const passportModule: Module = (app, { db, sessions }) => {
     if (!place) throw notFound();
     const quota = { sql: 'SELECT count(*)::int AS n FROM wishlist WHERE user_id = $1 AND place_id <> $2', params: [u.id, id], max: QUOTAS.wishlistTotal, code: 'wishlist_full' };
     await withQuota(db, `wishlist:${u.id}`, [quota], (t) => t.query('INSERT INTO wishlist (user_id, place_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [u.id, id]));
-    return { wishList: (await db.query<{ place_id: string }>('SELECT place_id FROM wishlist WHERE user_id = $1 ORDER BY created_at', [u.id])).map((r) => r.place_id) };
+    return { wishList: await wishListOf(db, u.id) };
   });
 
   app.delete('/v1/wishlist/:placeId', async (req) => {
     const u = await sessions.required(req);
     const id = placeId.parse((req.params as { placeId: string }).placeId);
     await db.query('DELETE FROM wishlist WHERE user_id = $1 AND place_id = $2', [u.id, id]);
-    return { wishList: (await db.query<{ place_id: string }>('SELECT place_id FROM wishlist WHERE user_id = $1 ORDER BY created_at', [u.id])).map((r) => r.place_id) };
+    return { wishList: await wishListOf(db, u.id) };
   });
 
   /**

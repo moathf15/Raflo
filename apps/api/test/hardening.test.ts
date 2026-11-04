@@ -83,13 +83,28 @@ describe('cookie session and CSRF', () => {
 });
 
 describe('progressive lockout', () => {
-  it('locks an email after 10 failures across codes, even from many IPs', async () => {
+  const failures = (email: string, n: number, ip: (g: string) => string) =>
+    db.query(`INSERT INTO auth_failures (identifier, ip) SELECT $1, ${ip('g')} FROM generate_series(1, ${n}) g`, [email]);
+
+  it('locks an email+IP after 10 failures, without locking the owner out from another IP (audit S2)', async () => {
     const email = 'locked@example.com';
-    await db.query(`INSERT INTO auth_failures (identifier, ip) SELECT $1, '10.6.0.' || g FROM generate_series(1, 10) g`, [email]);
+    await failures(email, 10, () => `'10.7.7.7'`);
     const r = await inject('POST', '/v1/auth/request-code', { body: { email }, ip: '10.7.7.7' });
     assert.equal(r.statusCode, 429);
     assert.equal(r.json().error.code, 'too_many_attempts');
     assert.ok(Number(r.headers['retry-after']) > 0);
+    assert.equal((await inject('POST', '/v1/auth/request-code', { body: { email }, ip: '10.8.8.8' })).statusCode, 202, 'the owner, elsewhere, can still sign in');
+  });
+
+  it('locks an email for an hour after 20 failures from any IPs, and a day after 30', async () => {
+    const email = 'locked-wide@example.com';
+    await failures(email, 20, (g) => `'10.6.0.' || ${g}`);
+    const r = await inject('POST', '/v1/auth/request-code', { body: { email }, ip: '10.7.7.8' });
+    assert.equal(r.statusCode, 429);
+    assert.ok(Number(r.headers['retry-after']) > 15 * 60 && Number(r.headers['retry-after']) <= 3600);
+    await failures(email, 10, (g) => `'10.6.1.' || ${g}`);
+    const day = await inject('POST', '/v1/auth/request-code', { body: { email }, ip: '10.7.7.9' });
+    assert.ok(Number(day.headers['retry-after']) > 3600);
   });
 });
 

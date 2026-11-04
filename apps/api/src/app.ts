@@ -5,7 +5,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { Redis } from 'ioredis';
 import { createSessions } from './auth/session';
-import type { Config } from './config';
+import { trustProxySetting, type Config } from './config';
 import type { Ctx } from './context';
 import type { Db } from './db/client';
 import { createMailer, type Mailer } from './lib/email';
@@ -28,7 +28,8 @@ export async function buildApp(db: Db, cfg: Config, opts: AppOptions = {}) {
     // Request-level timeouts (audit 3.6). Queries have their own statement_timeout.
     connectionTimeout: 15_000,
     requestTimeout: 20_000,
-    trustProxy: cfg.NODE_ENV === 'production'
+    // Only the configured proxies may set the client IP (audit S1); see TRUST_PROXY in config.ts.
+    trustProxy: trustProxySetting(cfg.TRUST_PROXY)
   });
   const ctx: Ctx = { db, sessions: createSessions(cfg, db), cfg, mailer: opts.mailer ?? createMailer(cfg, app.log) };
   const redis = cfg.REDIS_URL ? new Redis(cfg.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false }) : undefined;
@@ -40,6 +41,12 @@ export async function buildApp(db: Db, cfg: Config, opts: AppOptions = {}) {
   await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute', enableDraftSpec: true, ...(redis ? { redis, nameSpace: 'riflo-rl:' } : {}) });
   app.setErrorHandler(errorHandler);
   app.setNotFoundHandler((_req, reply) => reply.status(404).send({ error: { code: 'route_not_found', message: 'route_not_found' } }));
+
+  // A request that came with a dead session cookie gets it removed, whatever the route answers (audit S3).
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (ctx.sessions.hasStaleCookie(req)) ctx.sessions.clearCookie(reply);
+    return payload;
+  });
 
   app.get('/health', async () => {
     await db.query('SELECT 1');
