@@ -1,0 +1,40 @@
+/* App layout only. Component styles live in @riflo/ui. */
+body { background: var(--sand-200); }
+.screen { max-width: 480px; min-height: 100vh; margin: 0 auto; background: var(--ivory-50); display: flex; flex-direction: column; position: relative; }
+.screen__main { flex: 1; display: flex; flex-direction: column; }
+.screen__footer { position: sticky; bottom: 0; padding: 12px 16px 20px; background: var(--surface); border-top: 1px solid var(--line); display: flex; gap: 8px; z-index: 5; }
+.sample-bar { font-size: 11px; line-height: 16px; text-align: center; padding: 4px 8px; background: var(--busy-100); color: var(--busy-700); }
+
+.tabbar { position: sticky; bottom: 0; height: 72px; background: var(--surface); border-top: 1px solid var(--line); display: flex; justify-content: space-around; align-items: flex-start; padding-top: 10px; z-index: 5; }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--ink-muted); text-decoration: none; min-width: 72px; min-height: 44px; }
+.tab--on { color: var(--palm-700); font-weight: 500; }
+
+.topbar { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 12px; background: var(--surface); }
+
+.page { padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 24px; }
+.section { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.hscroll { display: flex; gap: 12px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 4px; scrollbar-width: none; }
+.place-tile { width: 156px; flex: none; display: flex; flex-direction: column; gap: 6px; text-align: start; background: none; border: 0; padding: 0; cursor: pointer; }
+.link { color: var(--palm-700); font-size: 14px; font-weight: 500; text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; min-height: 48px; border: 0; border-bottom: 2px solid transparent; background: none; font-size: 14px; color: var(--ink-muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.tabs button[aria-selected='true'] { border-bottom-color: var(--palm-700); color: var(--palm-700); font-weight: 500; }
+.field-error { color: var(--danger-700); font-size: 13px; }
+.counter { display: flex; align-items: center; gap: 12px; }
+.choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.choice { min-height: 56px; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 15px; }
+.choice[aria-pressed='true'] { border: 2px solid var(--palm-700); background: var(--palm-100); color: var(--palm-700); font-weight: 500; }
+.wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.info-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.info-grid > div { padding: 10px 12px; border-radius: var(--radius-md); background: var(--ivory-50); display: flex; flex-direction: column; gap: 2px; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stats > div { background: var(--ivory-50); border-radius: var(--radius-md); padding: 10px 12px; }
+.stamps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 4px; justify-items: center; }
+.edit-actions { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.edit-actions button { width: 36px; height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.map { position: relative; height: 140px; border-radius: var(--radius-lg); background: var(--sand-200); overflow: hidden; }
+.stars { display: flex; gap: 4px; }
+.stars button { width: 44px; height: 44px; border: 0; background: none; padding: 0; cursor: pointer; }
+textarea.rf-textarea { width: 100%; font: inherit; font-size: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 12px; resize: none; color: var(--ink); }

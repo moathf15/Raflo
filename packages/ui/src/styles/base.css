@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500&family=Readex+Pro:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: var(--font-text); color: var(--ink); background: var(--ivory-50); -webkit-font-smoothing: antialiased; font-size: 16px; line-height: 26px; }
+h1, h2, h3, p { margin: 0; }
+a { color: var(--palm-700); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ivory-50), 0 0 0 4px var(--focus); border-radius: var(--radius-sm); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Type scale (RIFLO Design System) */
+.t-display { font-family: var(--font-display); font-size: 28px; line-height: 36px; font-weight: 500; }
+.t-h2 { font-family: var(--font-display); font-size: 22px; line-height: 30px; font-weight: 500; }
+.t-h3 { font-family: var(--font-display); font-size: 18px; line-height: 26px; font-weight: 500; }
+.t-num { font-family: var(--font-display); font-size: 22px; line-height: 24px; font-weight: 500; }
+.t-body { font-size: 16px; line-height: 26px; }
+.t-sm { font-size: 14px; line-height: 22px; }
+.t-label { font-size: 14px; line-height: 20px; font-weight: 500; }
+.t-cap { font-size: 12px; line-height: 18px; }
+.muted { color: var(--ink-muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Layout helpers shared by both apps */
+.row { display: flex; align-items: center; gap: 8px; }
+.between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

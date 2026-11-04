@@ -1,0 +1,24 @@
+{
+  "name": "riflo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @riflo/web",
+    "dev:admin": "npm run dev -w @riflo/admin",
+    "dev:api": "npm run dev -w @riflo/api",
+    "build": "npm run build -w @riflo/web && npm run build -w @riflo/admin",
+    "test": "npm test -w @riflo/core && npm test -w @riflo/api",
+    "typecheck": "tsc -p apps/web && tsc -p apps/admin && tsc -p apps/api"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.11",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.2",
+    "typescript": "5.6.3",
+    "vite": "5.4.10",
+    "vite-plugin-singlefile": "2.0.2"
+  }
+}
