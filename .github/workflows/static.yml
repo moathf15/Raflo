@@ -61,6 +61,7 @@ jobs:
         env:
           BASE_PATH: /Raflo/
           VITE_API_URL: ${{ vars.VITE_API_URL }}
+                    VITE_ALLOW_MOCK: "true"
         run: npm run build -w @riflo/web
 
       - name: Check the build output
