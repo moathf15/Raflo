@@ -5,7 +5,7 @@ HQ is one Node service that serves the API, the background worker and the built 
 ```bash
 npm ci
 npm run build -w @riflo/hq
-HQ_STATIC_DIR=apps/hq/dist npm start -w @riflo/hq-api
+HQ_STATIC_DIR=$PWD/apps/hq/dist npm start -w @riflo/hq-api   # npm -w runs in apps/hq-api, so use an absolute path
 ```
 
 ## Environment
@@ -18,7 +18,7 @@ HQ_STATIC_DIR=apps/hq/dist npm start -w @riflo/hq-api
 | `HQ_PUBLIC_URL` | yes | `https://…` origin users open; used for CSRF and the OAuth callback |
 | `HQ_ALLOWED_ORIGINS` | no | Extra allowed origins |
 | `HQ_PORT` | no | Default 8090 |
-| `HQ_STATIC_DIR` | yes for the UI | Path to `apps/hq/dist` |
+| `HQ_STATIC_DIR` | yes for the UI | Absolute path to `apps/hq/dist` (or relative to `apps/hq-api`) |
 | `HQ_WORKER` | no | `false` on API-only instances when workers run separately |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | Enables "Connect with GitHub" |
 | `DATABASE_SSL`, `DATABASE_SSL_CA` | no | TLS to PostgreSQL |
