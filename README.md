@@ -26,6 +26,15 @@ With `AUTH_DEV_CODES=true` the sign-in code is shown on screen instead of being 
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed and why.
 
+## Raflo AI HQ
+
+An AI-workforce headquarters for running Raflo (virtual office, real AI employees, meetings, GitHub workflow with approval gates). Isolated in `apps/hq-api` and `apps/hq`; see [docs/hq/README.md](docs/hq/README.md).
+
+```bash
+npm run dev:hq-api   # API :8090 (prints a one-time owner setup code)
+npm run dev:hq       # UI  http://localhost:5180
+```
+
 ## Layout
 
 ```
@@ -33,6 +42,8 @@ apps/
   web/        User app (mobile first, Arabic RTL)
   admin/      Admin dashboard (desktop first), separate app and bundle
   api/        REST API (Fastify + PostgreSQL), migrations, tests
+  hq-api/     Raflo AI HQ: agent orchestration API and worker
+  hq/         Raflo AI HQ: virtual office frontend
 packages/
   core/       Domain types, trip planner, API contract, mock API, sample data
   ui/         RIFLO design-system tokens, base styles and shared components

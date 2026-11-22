@@ -452,6 +452,27 @@ describe('GitHub integration and approvals', () => {
     assert.match(promptText(hq.calls.at(-1)!), /<untrusted source="github issue">/);
   });
 
+  test('every read endpoint answers with data from the store', async () => {
+    const fe = await employeeId(hq, 'frontend-developer');
+    const [task] = await hq.db.query<{ id: string }>('SELECT id FROM hq_tasks LIMIT 1');
+    const [ch] = await hq.db.query<{ id: string }>(`SELECT id FROM hq_channels WHERE kind = 'direct' LIMIT 1`);
+    const [prop] = await hq.db.query<{ id: string }>('SELECT id FROM hq_change_proposals LIMIT 1');
+    const paths = [
+      '/hq/v1/auth/state', '/hq/v1/departments', '/hq/v1/employees', `/hq/v1/employees/${fe}`, '/hq/v1/performance', '/hq/v1/tool-permissions',
+      '/hq/v1/tasks', '/hq/v1/tasks?top=true', `/hq/v1/tasks/${task.id}`, '/hq/v1/projects', '/hq/v1/approvals', '/hq/v1/approvals?status=all',
+      '/hq/v1/meetings', '/hq/v1/channels', `/hq/v1/channels/${ch.id}/messages`, '/hq/v1/notifications', '/hq/v1/knowledge', '/hq/v1/knowledge?q=trip',
+      '/hq/v1/github/status', '/hq/v1/github/available', '/hq/v1/github/branches?repo=moathf15/Raflo', '/hq/v1/github/tree?repo=moathf15/Raflo',
+      '/hq/v1/proposals', `/hq/v1/proposals/${prop.id}`, '/hq/v1/settings', '/hq/v1/providers', '/hq/v1/audit', '/hq/v1/dashboard', '/hq/v1/reports'
+    ];
+    for (const path of paths) {
+      const r = await req('GET', path);
+      assert.equal(r.status, 200, `${path}: ${JSON.stringify(r.body)}`);
+    }
+    const profile = (await req('GET', `/hq/v1/employees/${fe}`)).body;
+    assert.ok(profile.tasks.length >= 1);
+    assert.ok(profile.runs.length >= 1);
+  });
+
   test('the audit log records owner decisions', async () => {
     const log = (await req('GET', '/hq/v1/audit')).body as { action: string }[];
     for (const a of ['github.connect', 'approval.approve', 'github.pr_opened', 'github.branch_created']) assert.ok(log.some((l) => l.action === a), a);

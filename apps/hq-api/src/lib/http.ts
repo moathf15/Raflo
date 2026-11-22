@@ -36,5 +36,6 @@ export function errorHandler(err: FastifyError | Error, req: FastifyRequest, rep
   const status = (err as FastifyError).statusCode;
   if (status && status < 500) return reply.status(status).send({ error: { code: (err as FastifyError).code ?? 'bad_request', message: err.message } });
   req.log.error(err);
+  if (process.env.NODE_ENV === 'test' && process.env.HQ_DEBUG) console.error(err);
   return reply.status(500).send({ error: { code: 'internal', message: 'internal' } });
 }

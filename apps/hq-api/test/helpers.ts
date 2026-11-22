@@ -98,6 +98,10 @@ export function fakeGitHub(): FakeGitHub {
     if (p === '/repos/moathf15/Raflo/pulls' && method === 'POST') return json(201, { number: 42, html_url: 'https://github.com/moathf15/Raflo/pull/42', head: { ref: body.head, sha: 'newcommit' }, base: { ref: 'main' }, draft: true });
     if (p === '/repos/moathf15/Raflo/issues' && method === 'POST') return json(201, { number: 7, html_url: 'https://github.com/moathf15/Raflo/issues/7', title: body.title });
     if (p === '/repos/moathf15/Raflo/issues/3') return json(200, { number: 3, title: 'Trip planner is slow', body: 'Steps to reproduce…', state: 'open', html_url: 'https://github.com/moathf15/Raflo/issues/3', user: { login: 'x' }, labels: [], created_at: '', updated_at: '' });
+    if (p === '/repos/moathf15/Raflo/pulls' && method === 'GET') return json(200, []);
+    if (p === '/repos/moathf15/Raflo/issues' && method === 'GET') return json(200, [{ number: 3, title: 'Trip planner is slow', body: 'Steps…', state: 'open', html_url: 'https://github.com/moathf15/Raflo/issues/3', user: { login: 'x' }, labels: [], created_at: '2026-11-20T00:00:00Z', updated_at: '2026-11-20T00:00:00Z' }]);
+    if (p === '/repos/moathf15/Raflo/commits') return json(200, [{ sha: 'headsha000000', html_url: '', commit: { message: 'Initial', author: { name: 'moathf15', date: '2026-11-20T00:00:00Z' } }, author: null }]);
+    if (p === '/repos/moathf15/Raflo/events') return json(200, []);
     if (p === '/repos/moathf15/Raflo/branches') return json(200, [{ name: 'main', commit: { sha: 'headsha' }, protected: true }]);
     return json(404, { message: `fake github: no route ${method} ${p}` });
   }) as typeof fetch;

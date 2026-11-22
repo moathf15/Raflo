@@ -71,7 +71,7 @@ export const orgModule: Module = (app, ctx, auth) => {
     const [perf] = await ctx.db.query(`SELECT * FROM (${PERFORMANCE_SQL}) p WHERE p.id = $1`, [id]);
     const tasks = await ctx.db.query(
       `SELECT t.id, t.title, t.status, t.priority, t.deadline, t.project_id, p.name AS project_name, t.updated_at, t.completed_at,
-              (t.reviewer_id = $1 AND t.assignee_id <> $1) AS as_reviewer
+              (t.reviewer_id = $1::uuid AND t.assignee_id <> $1::uuid) AS as_reviewer
        FROM hq_tasks t LEFT JOIN hq_projects p ON p.id = t.project_id WHERE t.assignee_id = $1 OR t.reviewer_id = $1 ORDER BY t.updated_at DESC LIMIT 100`,
       [id]
     );
@@ -87,7 +87,7 @@ export const orgModule: Module = (app, ctx, auth) => {
     const [dm] = await ctx.db.query<{ id: string }>(`SELECT id FROM hq_channels WHERE kind = 'direct' AND employee_id = $1`, [id]);
     const messages = await ctx.db.query(
       `SELECT m.*, c.kind AS channel_kind, c.name AS channel_name FROM hq_messages m JOIN hq_channels c ON c.id = m.channel_id
-       WHERE (m.author_type = 'employee' AND m.author_id = $1) OR m.data->>'to' = $1 OR c.employee_id = $1 ORDER BY m.created_at DESC LIMIT 30`,
+       WHERE (m.author_type = 'employee' AND m.author_id = $1::text) OR m.data->>'to' = $1::text OR c.employee_id = $1::uuid ORDER BY m.created_at DESC LIMIT 30`,
       [id]
     );
     const meetings = await ctx.db.query(
@@ -95,7 +95,7 @@ export const orgModule: Module = (app, ctx, auth) => {
       [id]
     );
     const knowledge = await ctx.db.query(
-      `SELECT id, title, kind, scope, updated_at FROM hq_knowledge WHERE employee_id = $1 OR source->>'employeeId' = $1 ORDER BY updated_at DESC LIMIT 20`,
+      `SELECT id, title, kind, scope, updated_at FROM hq_knowledge WHERE employee_id = $1::uuid OR source->>'employeeId' = $1::text ORDER BY updated_at DESC LIMIT 20`,
       [id]
     );
     const projects = await ctx.db.query(

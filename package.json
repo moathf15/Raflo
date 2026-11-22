@@ -10,8 +10,12 @@
     "dev:admin": "npm run dev -w @riflo/admin",
     "dev:api": "npm run dev -w @riflo/api",
     "build": "npm run build -w @riflo/web && npm run build -w @riflo/admin",
-    "test": "npm test -w @riflo/core && npm test -w @riflo/api",
-    "typecheck": "tsc -p apps/web && tsc -p apps/admin && tsc -p apps/api"
+    "test": "npm test -w @riflo/core && npm test -w @riflo/api && npm test -w @riflo/hq-api",
+    "typecheck": "tsc -p apps/web && tsc -p apps/admin && tsc -p apps/api && tsc -p apps/hq-api && tsc -p apps/hq",
+    "dev:hq-api": "npm run dev -w @riflo/hq-api",
+    "dev:hq": "npm run dev -w @riflo/hq",
+    "build:hq": "npm run build -w @riflo/hq",
+    "start:hq": "npm run build -w @riflo/hq && HQ_STATIC_DIR=../hq/dist npm start -w @riflo/hq-api"
   },
   "devDependencies": {
     "@types/react": "18.3.11",
